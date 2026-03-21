@@ -1,0 +1,10 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": false,
+    "tamper_logs": {
+      ".read": "auth != null",
+      ".write": false
+    }
+  }
+}

@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    
+
+    function requesterRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdminRole() {
+      return isSignedIn() && requesterRole() in ['ADMIN', 'LM_OFFICER', 'DISTRICT_SUPER_ADMIN', 'MANUFACTURER'];
+    }
+
+    match /users/{uid} {
+      allow create: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdminRole();
+      allow update: if isOwner(uid) || isAdminRole();
+      allow delete: if false;
+    }
+
+    match /device_registrations/{docId} {
+      allow create: if isSignedIn();
+      allow read: if isSignedIn() && (
+        resource.data.createdBy.userId == request.auth.uid ||
+        isAdminRole()
+      );
+      allow update: if isAdminRole();
+      allow delete: if false;
+    }
+
+    match /audit_logs/{logId} {
+      allow create: if isSignedIn();
+      allow read: if isAdminRole();
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
