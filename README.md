@@ -783,7 +783,7 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 ## 👥 Team & Acknowledgments
 
 ### Core Team
-- **Your Name** - *Lead Developer* - [@yourusername](https://github.com/yourusername)
+- **Your Name** - *Lead Developer* - [@yourusername](https://github.com/shanthoshkrishnan)
 
 ### Special Thanks
 - Legal Metrology Department for domain expertise
@@ -795,11 +795,8 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 
 ## 📞 Support & Contact
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/tamperguard/issues)
-- **Email:** support@tamperguard.com
-- **Documentation:** [Wiki](https://github.com/yourusername/tamperguard/wiki)
-- **Discord:** [Community Server](https://discord.gg/tamperguard)
-
+- **Issues:** [GitHub Issues](hhttps://github.com/shanthoshkrishnan/issues)
+- **Email:** shanthosh.krishnan@outlook.com
 ---
 
 ## 🌟 Show Your Support
