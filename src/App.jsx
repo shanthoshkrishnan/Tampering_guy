@@ -14,6 +14,9 @@ import ForgotPasswordPage from "./components/ForgotPasswordPage";
 import DeviceRegistrationPage from './components/DeviceRegistrationPage';
 import RegisterByRole from './components/RegisterByRole';
 import VerifyEmailPage from './components/VerifyEmailPage';
+import CommonHomePage from './components/CommonHomePage';
+import DocsPage from './components/DocsPage';
+import RoleDocsPage from './components/RoleDocsPage';
 
 
 function App() {
@@ -23,6 +26,9 @@ function App() {
         <SearchFilterProvider>
           <BrowserRouter>
             <Routes>
+              <Route path="/" element={<CommonHomePage />} />
+              <Route path="/docs" element={<DocsPage />} />
+              <Route path="/docs/roles/:role" element={<RoleDocsPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterUser />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -44,7 +50,6 @@ function App() {
 />
 
               <Route path="/verify-email" element={<VerifyEmailPage />} />
-              <Route path="/" element={<LoginPage />} />
               <Route 
                 path="/dashboard" 
                 element={

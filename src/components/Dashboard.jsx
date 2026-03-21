@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import UserDetailModal from './UserDetailModal';
 import InstallPrompt from './InstallPrompt';
+import { useMqttTamper } from '../hooks/useMqttTamper';
+
 
 export default function Dashboard() {
   const {
@@ -21,6 +23,13 @@ export default function Dashboard() {
   const [pendingLoading, setPendingLoading] = useState(false);
   const [pendingError, setPendingError] = useState('');
   const [pendingActionLoading, setPendingActionLoading] = useState(null); // userId
+  
+  const [deviceStates, setDeviceStates] = useState({});
+  const { devices: mqttDevices, connected: mqttConnected, lastUpdate } = useMqttTamper();
+
+  // NEW: Add these states
+
+  const [loading, setLoading] = useState(true);
 
   const currentRole = (currentUser?.role || 'USER').toUpperCase();
 
@@ -29,6 +38,139 @@ export default function Dashboard() {
   const isDistrictSuperAdmin = currentRole === 'DISTRICT_SUPER_ADMIN';
   const isLmOfficer = currentRole === 'LM_OFFICER';
   const isManufacturer = currentRole === 'MANUFACTURER';
+
+
+  const [userDevices, setUserDevices] = useState({
+  weighingMachine: [],
+  fuelDispenser: [],
+  energyMeter: [],
+});
+
+  useEffect(() => {
+    if (!isAdmin || !getPendingUsers) return;
+
+    const loadPending = async () => {
+      setPendingLoading(true);
+      setPendingError('');
+      const res = await getPendingUsers('ADMIN');
+      if (res.success) {
+        setPendingUsers(res.data || []);
+      } else {
+        setPendingError(res.error || 'Failed to load pending users');
+      }
+      setPendingLoading(false);
+    };
+
+    loadPending();
+  }, [isAdmin, getPendingUsers]);
+
+
+  // RTDB Listener for tamper logs
+useEffect(() => {
+  const db = getDatabase();
+  const logsRef = ref(db, 'tamper_logs');
+
+  const unsub = onValue(logsRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      setDeviceStates({});
+      return;
+    }
+
+    const data = snapshot.val();
+    const grouped = {};
+
+    Object.entries(data).forEach(([logId, log]) => {
+      const devId = log.device || 'UNKNOWN_DEVICE';
+      if (!grouped[devId]) grouped[devId] = [];
+      grouped[devId].push({ id: logId, ...log });
+    });
+
+    const next = {};
+    Object.entries(grouped).forEach(([deviceId, logs]) => {
+      logs.sort(
+        (a, b) => Number(a.timestamp || a.id) - Number(b.timestamp || b.id)
+      );
+      const latest = logs[logs.length - 1];
+
+      const isTampered =
+        latest.alarm === true ||
+        latest.type === 'tilt' ||
+        latest.vibration_sensor === 1 ||
+        latest.hall_sensor === 1;
+
+      next[deviceId] = {
+        latestLog: latest,
+        tampered: isTampered,
+      };
+    });
+
+    setDeviceStates(next);
+  });
+
+  return () => unsub();
+}, []);
+
+
+// Firestore Listener for all devices
+// Dashboard.jsx - Fixed Firestore listener
+// Replace the useEffect around line 95-170 with this:
+
+// ✅ EMAIL-BASED MQTT FILTERING
+useEffect(() => {
+  if (!mqttDevices.length || !currentUser?.email) {
+    setUserDevices({
+      weighingMachine: [],
+      fuelDispenser: [],
+      energyMeter: [],
+    });
+    setLoading(false);
+    return;
+  }
+
+  const isAdminEmail = currentUser.email === 'autonomousvehicle20@gmail.com';
+  const isUserEmail = currentUser.email === 'socialmedia.panimalar@gmail.com';
+
+  if (!isAdminEmail && !isUserEmail) {
+    console.log('❌ Unauthorized email:', currentUser.email);
+    setLoading(false);
+    return;
+  }
+
+  let filteredDevices = mqttDevices;
+
+  // ADMIN email: ALL devices
+  // USER email: Filter by assigned devices
+  if (isUserEmail) {
+    const assignedDeviceIds = currentUser?.assignedDevices || [];
+    filteredDevices = mqttDevices.filter(device =>
+      assignedDeviceIds.includes(device.deviceId)
+    );
+  }
+
+  // Group MQTT devices by type
+  const groupedDevices = {
+    weighingMachine: filteredDevices.filter(d => d.deviceType === 'weighingMachine'),
+    fuelDispenser: filteredDevices.filter(d => d.deviceType === 'fuelDispenser'),
+    energyMeter: filteredDevices.filter(d => d.deviceType === 'energyMeter'),
+  };
+
+  console.log('✅ EMAIL-BASED MQTT Dashboard:', {
+    email: currentUser.email,
+    isAdminEmail,
+    isUserEmail,
+    totalMqttDevices: mqttDevices.length,
+    filteredDevices: filteredDevices.length,
+    weighingMachine: groupedDevices.weighingMachine.length,
+    fuelDispenser: groupedDevices.fuelDispenser.length,
+    energyMeter: groupedDevices.energyMeter.length,
+  });
+
+  setUserDevices(groupedDevices);
+  setLoading(false);
+}, [mqttDevices, currentUser]);
+
+
+
 
   // ADMIN: fetch pending users
   useEffect(() => {
@@ -72,113 +214,121 @@ export default function Dashboard() {
       alert(res.error || 'Failed to reject user');
     }
     setPendingActionLoading(null);
-  };
+  }
 
   // USER VIEW
   if (isUser) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
-                  My Dashboard
-                </h1>
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
-                  Welcome, {currentUser?.name}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigate('/profile')}
-                  className="hidden sm:inline-flex px-3 py-2 rounded-lg bg-indigo-600 text-xs sm:text-sm text-white font-medium shadow-sm hover:bg-indigo-700 transition"
-                >
-                  👤 Profile
-                </button>
-                <button
-                  onClick={() => navigate('/settings')}
-                  className="hidden sm:inline-flex px-3 py-2 rounded-lg bg-slate-700 text-xs sm:text-sm text-white font-medium shadow-sm hover:bg-slate-800 transition"
-                >
-                  ⚙️ Settings
-                </button>
-                <div className="sm:hidden">
-                  <InstallPrompt />
-                </div>
+  const myDevices = [
+    ...userDevices.weighingMachine,
+    ...userDevices.fuelDispenser,
+    ...userDevices.energyMeter,
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">
+                My Dashboard
+              </h1>
+              <p className="mt-0.5 text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
+                Welcome, {currentUser?.name}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/profile')}
+                className="hidden sm:inline-flex items-center px-3 py-2 rounded-full bg-indigo-600 text-xs sm:text-sm text-white font-medium shadow-sm hover:bg-indigo-700 active:scale-[0.97] transition"
+              >
+                👤 Profile
+              </button>
+              <button
+                onClick={() => navigate('/settings')}
+                className="hidden sm:inline-flex items-center px-3 py-2 rounded-full bg-slate-800 text-xs sm:text-sm text-white font-medium shadow-sm hover:bg-slate-900 active:scale-[0.97] transition"
+              >
+                ⚙️ Settings
+              </button>
+              <div className="sm:hidden">
+                <InstallPrompt />
               </div>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
-          <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100 dark:border-slate-800 p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white">
-                My Devices
-              </h2>
-              <span className="text-xs sm:text-sm px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                {currentUser?.devices?.length || 0} devices
-              </span>
-            </div>
-            <div className="space-y-3 sm:space-y-4">
-              {currentUser?.devices?.map((device, idx) => (
-                <div
-                  key={idx}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 p-3 sm:p-4 rounded-xl bg-slate-50/90 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700"
-                >
-                  <div>
-                    <p className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
-                      {device.type}
-                    </p>
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                      ID: {device.deviceId}
-                    </p>
-                    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                      Location: {device.location}
-                    </p>
-                  </div>
-                  <span className="text-[11px] sm:text-xs px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium self-start sm:self-auto">
-                    {device.status || 'active'}
-                  </span>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        <section className="bg-white/90 dark:bg-slate-900/95 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100/80 dark:border-slate-800/80 p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white">
+              My Devices
+            </h2>
+            <span className="text-[11px] sm:text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+              {myDevices.length} devices
+            </span>
+          </div>
+
+          <div className="space-y-3 sm:space-y-4">
+            {myDevices.map((device, idx) => (
+              <div
+                key={device.id || idx}
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-500/60 hover:bg-slate-50/80 dark:hover:bg-slate-900 transition"
+              >
+                <div className="space-y-0.5">
+                  <p className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
+                    {device.deviceType}
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                    ID: {device.deviceId}
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                    Location: {device.location}
+                  </p>
                 </div>
-              ))}
-              {(!currentUser?.devices || currentUser.devices.length === 0) && (
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                  No devices found yet. Your registered devices will appear
-                  here.
-                </p>
-              )}
-            </div>
-          </section>
-        </main>
-      </div>
-    );
-  }
+                <span className="inline-flex items-center text-[11px] sm:text-xs px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 font-medium self-start sm:self-auto">
+                  {device.status || 'active'}
+                </span>
+              </div>
+            ))}
+
+            {myDevices.length === 0 && (
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                No devices found yet. Your registered devices will appear here.
+              </p>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 
   // DISTRICT SUPER ADMIN
   if (isDistrictSuperAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
         <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex justify-between items-center gap-3">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center gap-3">
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">
                 District Super Admin
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
+              <p className="mt-0.5 text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
                 Welcome, {currentUser?.name}
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => navigate('/profile')}
-                className="px-3 py-2 bg-indigo-600 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-indigo-700 transition"
+                className="px-3 py-2 rounded-full bg-indigo-600 text-white text-xs sm:text-sm shadow-sm hover:bg-indigo-700 active:scale-[0.97] transition"
               >
                 👤 Profile
               </button>
               <button
                 onClick={() => navigate('/settings')}
-                className="px-3 py-2 bg-slate-700 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-slate-800 transition"
+                className="px-3 py-2 rounded-full bg-slate-800 text-white text-xs sm:text-sm shadow-sm hover:bg-slate-900 active:scale-[0.97] transition"
               >
                 ⚙️ Settings
               </button>
@@ -186,12 +336,12 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
-          <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100 dark:border-slate-800 p-4 sm:p-6">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+          <section className="bg-white/90 dark:bg-slate-900/95 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100/80 dark:border-slate-800/80 p-4 sm:p-6">
             <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white mb-2">
               Admins in your district
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-3">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-2">
               Overview of admins and their open issues will appear here.
             </p>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
@@ -209,25 +359,25 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
         <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex justify-between items-center gap-3">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center gap-3">
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">
                 LM Officer Overview
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
+              <p className="mt-0.5 text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
                 Welcome, {currentUser?.name}
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => navigate('/profile')}
-                className="px-3 py-2 bg-indigo-600 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-indigo-700 transition"
+                className="px-3 py-2 rounded-full bg-indigo-600 text-white text-xs sm:text-sm shadow-sm hover:bg-indigo-700 active:scale-[0.97] transition"
               >
                 👤 Profile
               </button>
               <button
                 onClick={() => navigate('/settings')}
-                className="px-3 py-2 bg-slate-700 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-slate-800 transition"
+                className="px-3 py-2 rounded-full bg-slate-800 text-white text-xs sm:text-sm shadow-sm hover:bg-slate-900 active:scale-[0.97] transition"
               >
                 ⚙️ Settings
               </button>
@@ -235,12 +385,12 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
-          <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100 dark:border-slate-800 p-4 sm:p-6">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+          <section className="bg-white/90 dark:bg-slate-900/95 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100/80 dark:border-slate-800/80 p-4 sm:p-6">
             <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white mb-2">
               Districts and Super Admins
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-3">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-2">
               This section will summarize issues per district and per District
               Super Admin.
             </p>
@@ -258,25 +408,25 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
         <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex justify-between items-center gap-3">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex justify-between items-center gap-3">
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">
                 Manufacturer NOC Dashboard
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
+              <p className="mt-0.5 text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
                 Welcome, {currentUser?.manufacturer_name || currentUser?.name}
               </p>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => navigate('/profile')}
-                className="px-3 py-2 bg-indigo-600 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-indigo-700 transition"
+                className="px-3 py-2 rounded-full bg-indigo-600 text-white text-xs sm:text-sm shadow-sm hover:bg-indigo-700 active:scale-[0.97] transition"
               >
                 👤 Profile
               </button>
               <button
                 onClick={() => navigate('/settings')}
-                className="px-3 py-2 bg-slate-700 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-slate-800 transition"
+                className="px-3 py-2 rounded-full bg-slate-800 text-white text-xs sm:text-sm shadow-sm hover:bg-slate-900 active:scale-[0.97] transition"
               >
                 ⚙️ Settings
               </button>
@@ -284,12 +434,12 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
-          <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100 dark:border-slate-800 p-4 sm:p-6">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+          <section className="bg-white/90 dark:bg-slate-900/95 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100/80 dark:border-slate-800/80 p-4 sm:p-6">
             <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white mb-2">
               Alerts by Severity
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-3">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-2">
               High-level view of CRITICAL / HIGH / MEDIUM / LOW alerts across
               all your devices.
             </p>
@@ -303,12 +453,19 @@ export default function Dashboard() {
     );
   }
 
-  // ADMIN VIEW
-  const weighingMachineUsers =
-    currentUser?.usersDatabase?.weighingMachine || [];
-  const fuelDispenserUsers =
-    currentUser?.usersDatabase?.fuelDispenser || [];
-  const energyMeterUsers = currentUser?.usersDatabase?.energyMeter || [];
+  const mergeDeviceState = (list) =>
+  list.map((device) => {
+    const state = deviceStates[device.deviceId] || {};
+    return {
+      ...device,
+      tampered: state.tampered ?? false,
+      latestTamperLog: state.latestLog ?? null,
+    };
+  });
+
+const weighingMachineUsers = mergeDeviceState(userDevices.weighingMachine);
+const fuelDispenserUsers = mergeDeviceState(userDevices.fuelDispenser);
+const energyMeterUsers = mergeDeviceState(userDevices.energyMeter);
 
   const allUsers = [
     ...weighingMachineUsers,
@@ -379,29 +536,42 @@ export default function Dashboard() {
     }
   };
 
+  console.log('=== DASHBOARD DEBUG ===');
+console.log('currentUser:', currentUser);
+console.log('currentUser.uid:', currentUser?.uid);
+console.log('isAdmin:', isAdmin);
+console.log('isUser:', isUser);
+console.log('userDevices:', userDevices);
+console.log('deviceStates:', deviceStates);
+console.log('weighingMachineUsers:', weighingMachineUsers);
+console.log('fuelDispenserUsers:', fuelDispenserUsers);
+console.log('energyMeterUsers:', energyMeterUsers);
+console.log('totalUsers:', totalUsers);
+console.log('======================');
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       <header className="sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
           <div className="flex justify-between items-center gap-3">
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-white truncate">
+              <h1 className="text-xl sm:text-2xl font-semibold text-slate-900 dark:text-white truncate">
                 LM Admin Dashboard
               </h1>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
+              <p className="mt-0.5 text-xs sm:text-sm text-slate-600 dark:text-slate-400 truncate">
                 Welcome, {currentUser?.name}
               </p>
             </div>
             <div className="flex gap-2 items-center">
               <button
                 onClick={() => navigate('/profile')}
-                className="px-3 py-2 bg-indigo-600 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-indigo-700 transition"
+                className="px-3 py-2 rounded-full bg-indigo-600 text-white text-xs sm:text-sm shadow-sm hover:bg-indigo-700 active:scale-[0.97] transition"
               >
                 👤 Profile
               </button>
               <button
                 onClick={() => navigate('/settings')}
-                className="px-3 py-2 bg-slate-700 text-white text-xs sm:text-sm rounded-lg shadow-sm hover:bg-slate-800 transition"
+                className="px-3 py-2 rounded-full bg-slate-800 text-white text-xs sm:text-sm shadow-sm hover:bg-slate-900 active:scale-[0.97] transition"
               >
                 ⚙️ Settings
               </button>
@@ -413,19 +583,19 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 sm:space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-5 sm:space-y-8">
         {/* Pending user registrations */}
-        <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100 dark:border-slate-800 p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+        <section className="bg-white/95 dark:bg-slate-900/95 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100/80 dark:border-slate-800/80 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
               <h2 className="text-base sm:text-xl font-semibold text-slate-900 dark:text-white">
                 Pending User Registrations
               </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+              <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
                 Approve or reject new USER accounts awaiting admin approval.
               </p>
             </div>
-            <span className="self-start text-[11px] sm:text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            <span className="self-start sm:self-auto text-[11px] sm:text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               {pendingUsers.length} pending
             </span>
           </div>
@@ -453,7 +623,7 @@ export default function Dashboard() {
               {pendingUsers.map((u) => (
                 <div
                   key={u.uid}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 bg-slate-50/80 dark:bg-slate-900/60"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-slate-200/80 dark:border-slate-700 rounded-xl p-3 sm:p-4 bg-slate-50/80 dark:bg-slate-900/60 hover:border-indigo-200 dark:hover:border-indigo-500/60 transition"
                 >
                   <div className="space-y-1">
                     <p className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white">
@@ -469,11 +639,11 @@ export default function Dashboard() {
                       Created at: {u.createdAt}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 w-full sm:w-auto">
                     <button
                       onClick={() => handleApprove(u.uid)}
                       disabled={pendingActionLoading === u.uid}
-                      className="flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm rounded-lg bg-emerald-600 text-white font-medium shadow-sm hover:bg-emerald-700 disabled:opacity-50 transition"
+                      className="flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm rounded-full bg-emerald-600 text-white font-medium shadow-sm hover:bg-emerald-700 disabled:opacity-60 active:scale-[0.97] transition"
                     >
                       {pendingActionLoading === u.uid
                         ? 'Approving...'
@@ -482,7 +652,7 @@ export default function Dashboard() {
                     <button
                       onClick={() => handleReject(u.uid)}
                       disabled={pendingActionLoading === u.uid}
-                      className="flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm rounded-lg bg-rose-600 text-white font-medium shadow-sm hover:bg-rose-700 disabled:opacity-50 transition"
+                      className="flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm rounded-full bg-rose-600 text-white font-medium shadow-sm hover:bg-rose-700 disabled:opacity-60 active:scale-[0.97] transition"
                     >
                       {pendingActionLoading === u.uid
                         ? 'Rejecting...'
@@ -577,14 +747,74 @@ export default function Dashboard() {
           ))}
         </section>
 
-        {/* Expanded category details placeholder */}
-        {expandedCategory && (
-          <section className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100 dark:border-slate-800 p-4 sm:p-6 animate-[fadeIn_0.2s_ease-out]">
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-              Device cards and details for <strong>{expandedCategory}</strong>{' '}
-              will appear here (same as your previous implementation).
-            </p>
-          </section>
+        {/* Expanded category details */}
+{expandedCategory && (
+  <section className="bg-white/95 dark:bg-slate-900/95 rounded-2xl sm:rounded-3xl shadow-md sm:shadow-lg border border-slate-100/80 dark:border-slate-800/80 p-4 sm:p-6 animate-[fadeIn_0.2s_ease-out]">
+    <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mb-4">
+      Device cards and details for <strong>{expandedCategory}</strong>{' '}
+      will appear here.
+    </p>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+      {getFilteredUsers(
+        categories.find((c) => c.id === expandedCategory)
+      ).map((u) => (
+        <button
+          key={u.uid}
+          onClick={() => setSelectedUser(u)}
+          className="flex flex-col items-start text-left gap-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/70 p-3 sm:p-4 hover:border-indigo-200 dark:hover:border-indigo-500/70 hover:bg-white dark:hover:bg-slate-900 transition"
+        >
+          <div className="text-sm font-semibold text-slate-900 dark:text-white truncate w-full">
+            {u.name || 'User'}
+          </div>
+          <div className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 truncate w-full">
+            {u.deviceId || u.email}
+          </div>
+
+          <div className="flex items-center gap-2 mt-1">
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                u.tampered
+                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'
+                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+              }`}
+            >
+              {u.tampered ? 'Tampered' : 'Normal'}
+            </span>
+            {u.location && (
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                {u.location}
+              </span>
+            )}
+          </div>
+
+          {u.latestTamperLog && (
+            <div className="mt-2 w-full rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-1.5">
+              <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                Live tamper data
+              </p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                Type: {u.latestTamperLog.type} | Alarm:{' '}
+                {u.latestTamperLog.alarm ? 'ON' : 'OFF'}
+              </p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                Pitch: {u.latestTamperLog.pitch}° | Roll:{' '}
+                {u.latestTamperLog.roll}°
+              </p>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                Hall: {u.latestTamperLog.hall_sensor} | Vib:{' '}
+                {u.latestTamperLog.vibration_sensor}
+              </p>
+              {'weight' in u.latestTamperLog && (
+                <p className="text-[11px] text-slate-900 dark:text-slate-100 font-semibold">
+                  Weight: {u.latestTamperLog.weight} kg
+                </p>
+              )}
+            </div>
+          )}
+        </button>
+      ))}
+    </div>
+  </section>
         )}
 
         {!expandedCategory && (

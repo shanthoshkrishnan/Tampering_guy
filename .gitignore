@@ -1,9 +1,241 @@
-# Environment variables
+# ===================================
+# TamperGuard .gitignore
+# ===================================
+
+# ===================================
+# Environment Variables & Secrets
+# ===================================
 .env
 .env.local
-.env.production
+.env.*.local
 .env.development
+.env.staging
+.env.production
+.env.backup
+!.env.example
 
+# API Keys and credentials
+*.pem
+*.key
+*.cert
+service-account-key.json
+firebase-adminsdk.json
+google-services.json
+GoogleService-Info.plist
+
+# Firebase local runtime/config exports
+.runtimeconfig.json
+firebase-export-*
+
+# ===================================
+# Dependencies
+# ===================================
+node_modules/
+jspm_packages/
+bower_components/
+
+# ===================================
+# Build Outputs
+# ===================================
+dist/
+dist-ssr/
+build/
+dev-dist/
+*.local
+
+# Production build
+out/
+.next/
+.nuxt/
+.cache/
+
+# ===================================
 # Firebase
+# ===================================
 .firebase/
-    
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+functions/node_modules/
+functions/.env
+.firebase.json.backup
+
+# ===================================
+# Logs
+# ===================================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime logs
+*.log.*
+combined.log
+error.log
+
+# ===================================
+# Editor Directories & Files
+# ===================================
+.vscode/*
+.history/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ===================================
+# Operating System Files
+# ===================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===================================
+# Android / Capacitor
+# ===================================
+android/.gradle/
+android/.idea/
+android/local.properties
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/captures/
+android/**/*.iml
+android/**/.gradle
+android/**/build
+android/**/local.properties
+android/**/.idea
+android/**/.externalNativeBuild
+android/**/.cxx
+*.apk
+*.aab
+*.ap_
+*.dex
+output.json
+*.jks
+*.keystore
+*.p12
+
+# Capacitor
+.capacitor/
+capacitor.config.json.backup
+
+# ===================================
+# iOS (if implementing later)
+# ===================================
+ios/App/Pods/
+ios/App/*.xcworkspace/
+ios/App/*.xcodeproj/xcuserdata/
+ios/App/build/
+*.ipa
+
+# ===================================
+# Testing
+# ===================================
+coverage/
+*.coverage
+.nyc_output/
+.jest/
+__tests__/__snapshots__/
+*.spec.js.snap
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ===================================
+# Temporary Files
+# ===================================
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.cache
+.temp/
+
+# ===================================
+# Package Manager Locks (choose one)
+# ===================================
+# Uncomment if using pnpm or yarn exclusively
+# pnpm-lock.yaml
+# yarn.lock
+
+# ===================================
+# PWA / Service Workers
+# ===================================
+sw.js.map
+workbox-*.js.map
+public/sw.js
+public/workbox-*.js
+
+# ===================================
+# Analytics & Monitoring
+# ===================================
+.sentryclirc
+sentry.properties
+
+# ===================================
+# Database
+# ===================================
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+init_db.sql/
+
+# ===================================
+# Documentation Build
+# ===================================
+docs/_build/
+docs/.doctrees/
+site/
+
+# ===================================
+# Miscellaneous
+# ===================================
+.vercel
+.netlify
+.env.vault
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+
+# Generated icons/splash screens
+resources/
+public/icons/generated/
+public/assets/
+
+# Vite cache
+.vite/
+
+# Lockfiles (optional - uncomment to ignore)
+# package-lock.json
