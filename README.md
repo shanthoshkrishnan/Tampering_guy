@@ -10,7 +10,7 @@
 
 **A next-generation IoT-powered solution for real-time tampering detection and compliance monitoring of Legal Metrology devices.**
 
-[Features](#-features) • [Demo](#-demo) • [Installation](#-installation) • [Documentation](#-documentation) • [Contributing](#-contributing)
+[Features](#-features) • [Demo](#-demo) • [Installation](#-installation) • [Documentation](#-documentation)
 
 </div>
 
@@ -420,8 +420,8 @@ Suggested evolution path:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/tamperguard.git
-   cd tamperguard
+   git clone https://github.com/shanthoshkrishnan/Tampering_guy.git
+   cd Tampering_guy
    ```
 
 2. **Install dependencies**
@@ -727,28 +727,6 @@ firebase deploy
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-### Code Style
-
-- Use ESLint for linting
-- Follow React best practices
-- Write meaningful commit messages
-- Add comments for complex logic
-- Update tests for new features
-
----
-
 ## 📝 Roadmap
 
 ### Phase 1: MVP ✅
@@ -783,7 +761,7 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 ## 👥 Team & Acknowledgments
 
 ### Core Team
-- **Your Name** - *Lead Developer* - [@yourusername](https://github.com/shanthoshkrishnan)
+- **Shanthosh Krishnan** - *Lead Developer* - [@shanthoshkrishnan](https://github.com/shanthoshkrishnan)
 
 ### Special Thanks
 - Legal Metrology Department for domain expertise
@@ -795,7 +773,7 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 
 ## 📞 Support & Contact
 
-- **Issues:** [GitHub Issues](hhttps://github.com/shanthoshkrishnan/issues)
+- **Issues:** [GitHub Issues](https://github.com/shanthoshkrishnan/Tampering_guy/issues)
 - **Email:** shanthosh.krishnan@outlook.com
 ---
 
