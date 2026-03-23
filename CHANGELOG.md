@@ -87,10 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Comprehensive README with project journey
-- Contributing guidelines
 - Production readiness checklist
 - Environment variable examples
-- Code of conduct in contributing guide
 
 ## [0.1.0] - 2025-12-10 (Hackathon MVP)
 

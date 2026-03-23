@@ -304,7 +304,6 @@ jobs:
 ## 📚 Documentation
 
 - [ ] README.md complete and accurate
-- [ ] CONTRIBUTING.md created
 - [ ] LICENSE file added
 - [ ] .env.example up-to-date
 - [ ] API documentation created (if applicable)
